@@ -1,20 +1,9 @@
 FROM golang:1.21.2-alpine3.18
 
-RUN apt-get update
-RUN apt-get install -y ruby ruby-dev rubygems build-essential
+RUN apk add bash git ruby rpm curl rsync tar binutils
 RUN gem install --no-document fpm
 ENV GOPATH=/tmp/go
 
-RUN apt-get install -y curl
-RUN apt-get install -y rsync
-RUN apt-get install -y gcc
-RUN apt-get install -y g++
-RUN apt-get install -y bash
-RUN apt-get install -y git
-RUN apt-get install -y tar
-RUN apt-get install -y rpm
 
 RUN mkdir -p $GOPATH/src/github.com/github/gh-ost
 WORKDIR $GOPATH/src/github.com/github/gh-ost
-COPY . .
-RUN bash build.sh

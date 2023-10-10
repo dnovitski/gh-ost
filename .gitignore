@@ -3,3 +3,5 @@
 /libexec/
 /.vendor/
 .idea/
+release
+.DS_Store
