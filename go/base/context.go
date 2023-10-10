@@ -50,7 +50,7 @@ const (
 
 const (
 	HTTPStatusOK                  = 200
-	MaxEventsBatchSize            = 1000
+	MaxEventsBatchSize            = 1000000
 	MaxEventsBatchConcurrencySize = 1000000
 	ETAUnknown                    = math.MinInt64
 )
