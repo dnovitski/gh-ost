@@ -32,6 +32,7 @@ var (
 )
 
 type printStatusFunc func(PrintStatusRule, io.Writer)
+type printWorkersFunc func(io.Writer)
 
 // Server listens for requests on a socket file or via TCP
 type Server struct {
@@ -40,14 +41,16 @@ type Server struct {
 	tcpListener      net.Listener
 	hooksExecutor    base.Hooks
 	printStatus      printStatusFunc
+	printWorkers     printWorkersFunc
 	isCPUProfiling   int64
 }
 
-func NewServer(migrationContext *base.MigrationContext, hooksExecutor base.Hooks, printStatus printStatusFunc) *Server {
+func NewServer(migrationContext *base.MigrationContext, hooksExecutor base.Hooks, printStatus printStatusFunc, printWorkers printWorkersFunc) *Server {
 	return &Server{
 		migrationContext: migrationContext,
 		hooksExecutor:    hooksExecutor,
 		printStatus:      printStatus,
+		printWorkers:     printWorkers,
 	}
 }
 
@@ -243,6 +246,11 @@ help                                 # This message
 		return ForcePrintStatusOnlyRule, nil
 	case "info", "status":
 		return ForcePrintStatusAndHintRule, nil
+	case "worker-stats":
+		if srv.printWorkers != nil {
+			srv.printWorkers(writer)
+		}
+		return NoPrintStatusRule, nil
 	case "cpu-profile":
 		cpuProfile, err := srv.runCPUProfile(arg)
 		if err == nil {
