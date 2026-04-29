@@ -333,7 +333,7 @@ func (suite *ApplierTestSuite) TestInitDBConnections() {
 	applier := NewApplier(migrationContext)
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	mysqlVersion, _ := strings.CutPrefix(testMysqlContainerImage, "mysql:")
@@ -374,7 +374,7 @@ func (suite *ApplierTestSuite) TestApplyDMLEventQueries() {
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	dmlEvents := []*binlog.BinlogDMLEvent{
@@ -431,7 +431,7 @@ func (suite *ApplierTestSuite) TestValidateOrDropExistingTables() {
 	applier := NewApplier(migrationContext)
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	err = applier.ValidateOrDropExistingTables()
@@ -463,7 +463,7 @@ func (suite *ApplierTestSuite) TestValidateOrDropExistingTablesWithGhostTableExi
 	applier := NewApplier(migrationContext)
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	err = applier.ValidateOrDropExistingTables()
@@ -494,7 +494,7 @@ func (suite *ApplierTestSuite) TestValidateOrDropExistingTablesWithGhostTableExi
 	applier := NewApplier(migrationContext)
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	err = applier.ValidateOrDropExistingTables()
@@ -532,7 +532,7 @@ func (suite *ApplierTestSuite) TestCreateGhostTable() {
 	applier := NewApplier(migrationContext)
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	err = applier.CreateGhostTable()
@@ -586,7 +586,7 @@ func (suite *ApplierTestSuite) TestPanicOnWarningsInApplyIterationInsertQuerySuc
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(8)
 	suite.Require().NoError(err)
 
 	_, err = suite.db.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (id, item_id) VALUES (123456, 42);", getTestTableName()))
@@ -676,7 +676,7 @@ func (suite *ApplierTestSuite) TestPanicOnWarningsInApplyIterationInsertQueryFai
 	}
 	applier := NewApplier(migrationContext)
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	err = applier.CreateChangelogTable()
@@ -743,7 +743,7 @@ func (suite *ApplierTestSuite) TestWriteCheckpoint() {
 
 	applier := NewApplier(migrationContext)
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	err = applier.CreateChangelogTable()
@@ -825,7 +825,7 @@ func (suite *ApplierTestSuite) TestPanicOnWarningsWithDuplicateKeyOnNonMigration
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows into ghost table (simulating bulk copy phase)
@@ -914,7 +914,7 @@ func (suite *ApplierTestSuite) TestPanicOnWarningsWithDuplicateCompositeUniqueKe
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows into ghost table (simulating bulk copy phase)
@@ -1016,7 +1016,7 @@ func (suite *ApplierTestSuite) TestUpdateModifyingUniqueKeyWithDuplicateOnOtherI
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Setup: Insert initial rows into ghost table
@@ -1111,7 +1111,7 @@ func (suite *ApplierTestSuite) TestNormalUpdateWithPanicOnWarnings() {
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Setup: Insert initial rows into ghost table
@@ -1191,7 +1191,7 @@ func (suite *ApplierTestSuite) TestDuplicateOnMigrationKeyAllowedInBinlogReplay(
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows into ghost table (simulating bulk copy phase)
@@ -1282,7 +1282,7 @@ func (suite *ApplierTestSuite) TestRegexMetacharactersInIndexName() {
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows
@@ -1384,7 +1384,7 @@ func (suite *ApplierTestSuite) TestPanicOnWarningsDisabled() {
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows into ghost table
@@ -1473,7 +1473,7 @@ func (suite *ApplierTestSuite) TestMultipleDMLEventsInBatch() {
 	suite.Require().NoError(applier.prepareQueries())
 	defer applier.Teardown()
 
-	err = applier.InitDBConnections()
+	err = applier.InitDBConnections(1)
 	suite.Require().NoError(err)
 
 	// Insert initial rows into ghost table

@@ -1,6 +1,6 @@
 /*
    Copyright 2022 GitHub Inc.
-	 See https://github.com/github/gh-ost/blob/master/LICENSE
+ See https://github.com/github/gh-ost/blob/master/LICENSE
 */
 
 package binlog
@@ -11,7 +11,6 @@ import (
 
 	"github.com/github/gh-ost/go/base"
 	"github.com/github/gh-ost/go/mysql"
-	"github.com/github/gh-ost/go/sql"
 
 	"time"
 
@@ -85,59 +84,17 @@ func (this *GoMySQLReader) GetCurrentBinlogCoordinates() mysql.BinlogCoordinates
 	return this.currentCoordinates.Clone()
 }
 
-func (this *GoMySQLReader) handleRowsEvent(ev *replication.BinlogEvent, rowsEvent *replication.RowsEvent, entriesChannel chan<- *BinlogEntry) error {
-	currentCoords := this.GetCurrentBinlogCoordinates()
-	dml := ToEventDML(ev.Header.EventType.String())
-	if dml == NotDML {
-		return fmt.Errorf("Unknown DML type: %s", ev.Header.EventType.String())
-	}
-	for i, row := range rowsEvent.Rows {
-		if dml == UpdateDML && i%2 == 1 {
-			// An update has two rows (WHERE+SET)
-			// We do both at the same time
-			continue
-		}
-		binlogEntry := NewBinlogEntryAt(currentCoords)
-		binlogEntry.DmlEvent = NewBinlogDMLEvent(
-			string(rowsEvent.Table.Schema),
-			string(rowsEvent.Table.Table),
-			dml,
-		)
-		switch dml {
-		case InsertDML:
-			{
-				binlogEntry.DmlEvent.NewColumnValues = sql.ToColumnValues(row)
-			}
-		case UpdateDML:
-			{
-				binlogEntry.DmlEvent.WhereColumnValues = sql.ToColumnValues(row)
-				binlogEntry.DmlEvent.NewColumnValues = sql.ToColumnValues(rowsEvent.Rows[i+1])
-			}
-		case DeleteDML:
-			{
-				binlogEntry.DmlEvent.WhereColumnValues = sql.ToColumnValues(row)
-			}
-		}
-
-		// The channel will do the throttling. Whoever is reading from the channel
-		// decides whether action is taken synchronously (meaning we wait before
-		// next iteration) or asynchronously (we keep pushing more events)
-		// In reality, reads will be synchronous
-		entriesChannel <- binlogEntry
-	}
-	return nil
-}
-
-// StreamEvents
-func (this *GoMySQLReader) StreamEvents(canStopStreaming func() bool, entriesChannel chan<- *BinlogEntry) error {
-	if canStopStreaming() {
-		return nil
-	}
+// StreamEvents reads binlog events and sends them to the given channel.
+// It is blocking and should be executed in a goroutine.
+func (this *GoMySQLReader) StreamEvents(ctx context.Context, canStopStreaming func() bool, eventChannel chan<- *replication.BinlogEvent) error {
 	for {
 		if canStopStreaming() {
-			break
+			return nil
 		}
-		ev, err := this.binlogStreamer.GetEvent(context.Background())
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		ev, err := this.binlogStreamer.GetEvent(ctx)
 		if err != nil {
 			return err
 		}
@@ -159,45 +116,38 @@ func (this *GoMySQLReader) StreamEvents(canStopStreaming func() bool, entriesCha
 
 		switch event := ev.Event.(type) {
 		case *replication.GTIDEvent:
-			if !this.migrationContext.UseGTIDs {
-				continue
-			}
-			sid, err := uuid.FromBytes(event.SID)
-			if err != nil {
-				return err
-			}
-			this.currentCoordinatesMutex.Lock()
-			if this.LastTrxCoords != nil {
-				this.currentCoordinates = this.LastTrxCoords.Clone()
-			}
-			coords := this.currentCoordinates.(*mysql.GTIDBinlogCoordinates)
-			trxGset := gomysql.NewUUIDSet(sid, gomysql.Interval{Start: event.GNO, Stop: event.GNO + 1})
-			coords.GTIDSet.AddSet(trxGset)
-			this.currentCoordinatesMutex.Unlock()
-		case *replication.RotateEvent:
 			if this.migrationContext.UseGTIDs {
-				continue
+				sid, err := uuid.FromBytes(event.SID)
+				if err != nil {
+					return err
+				}
+				this.currentCoordinatesMutex.Lock()
+				if this.LastTrxCoords != nil {
+					this.currentCoordinates = this.LastTrxCoords.Clone()
+				}
+				coords := this.currentCoordinates.(*mysql.GTIDBinlogCoordinates)
+				trxGset := gomysql.NewUUIDSet(sid, gomysql.Interval{Start: event.GNO, Stop: event.GNO + 1})
+				coords.GTIDSet.AddSet(trxGset)
+				this.currentCoordinatesMutex.Unlock()
 			}
-			this.currentCoordinatesMutex.Lock()
-			coords := this.currentCoordinates.(*mysql.FileBinlogCoordinates)
-			coords.LogFile = string(event.NextLogName)
-			this.migrationContext.Log.Infof("rotate to next log from %s:%d to %s", coords.LogFile, int64(ev.Header.LogPos), event.NextLogName)
-			this.currentCoordinatesMutex.Unlock()
+		case *replication.RotateEvent:
+			if !this.migrationContext.UseGTIDs {
+				this.currentCoordinatesMutex.Lock()
+				coords := this.currentCoordinates.(*mysql.FileBinlogCoordinates)
+				coords.LogFile = string(event.NextLogName)
+				this.migrationContext.Log.Infof("rotate to next log from %s:%d to %s", coords.LogFile, int64(ev.Header.LogPos), event.NextLogName)
+				this.currentCoordinatesMutex.Unlock()
+			}
 		case *replication.XIDEvent:
 			if this.migrationContext.UseGTIDs {
 				this.LastTrxCoords = &mysql.GTIDBinlogCoordinates{GTIDSet: event.GSet.(*gomysql.MysqlGTIDSet)}
 			} else {
 				this.LastTrxCoords = this.currentCoordinates.Clone()
 			}
-		case *replication.RowsEvent:
-			if err := this.handleRowsEvent(ev, event, entriesChannel); err != nil {
-				return err
-			}
 		}
-	}
-	this.migrationContext.Log.Debugf("done streaming events")
 
-	return nil
+		eventChannel <- ev
+	}
 }
 
 func (this *GoMySQLReader) Close() error {

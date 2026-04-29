@@ -19,6 +19,8 @@ import (
 	"github.com/github/gh-ost/go/mysql"
 	"github.com/github/gh-ost/go/sql"
 
+	gomysql "github.com/go-mysql-org/go-mysql/mysql"
+
 	"github.com/openark/golib/sqlutils"
 )
 
@@ -949,6 +951,37 @@ func (this *Inspector) readChangelogState(hint string) (string, error) {
 		return nil
 	}, hint)
 	return result, err
+}
+
+// readCurrentBinlogCoordinates reads master status from hooked server
+func (this *Inspector) readCurrentBinlogCoordinates() (mysql.BinlogCoordinates, error) {
+	var coords mysql.BinlogCoordinates
+	query := fmt.Sprintf(`show /* gh-ost readCurrentBinlogCoordinates */ %s`, mysql.ReplicaTermFor(this.migrationContext.InspectorMySQLVersion, "master status"))
+	foundMasterStatus := false
+	err := sqlutils.QueryRowsMap(this.db, query, func(m sqlutils.RowMap) error {
+		if this.migrationContext.UseGTIDs {
+			execGtidSet := m.GetString("Executed_Gtid_Set")
+			gtidSet, err := gomysql.ParseMysqlGTIDSet(execGtidSet)
+			if err != nil {
+				return err
+			}
+			coords = &mysql.GTIDBinlogCoordinates{GTIDSet: gtidSet.(*gomysql.MysqlGTIDSet)}
+		} else {
+			coords = &mysql.FileBinlogCoordinates{
+				LogFile: m.GetString("File"),
+				LogPos:  m.GetInt64("Position"),
+			}
+		}
+		foundMasterStatus = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !foundMasterStatus {
+		return nil, fmt.Errorf("Got no results from SHOW MASTER STATUS. Bailing out")
+	}
+	return coords, nil
 }
 
 func (this *Inspector) getMasterConnectionConfig() (applierConfig *mysql.ConnectionConfig, err error) {
