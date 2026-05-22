@@ -563,6 +563,7 @@ func TestBuildDMLInsertQuerySignedUnsigned(t *testing.T) {
 		args := []interface{}{3, "testname", "first", int8(-1), 23}
 		sharedColumns.SetUnsigned("position")
 		uniqueKeyColumns := NewColumnList([]string{"position"})
+		uniqueKeyColumns.SetUnsigned("position")
 		query, sharedArgs, uniqueKeyArgs, err := BuildDMLInsertQuery(databaseName, tableName, tableColumns, sharedColumns, sharedColumns, uniqueKeyColumns, args)
 		test.S(t).ExpectNil(err)
 		expected := `
@@ -581,6 +582,7 @@ func TestBuildDMLInsertQuerySignedUnsigned(t *testing.T) {
 		args := []interface{}{3, "testname", "first", int32(-1), 23}
 		sharedColumns.SetUnsigned("position")
 		uniqueKeyColumns := NewColumnList([]string{"position"})
+		uniqueKeyColumns.SetUnsigned("position")
 		query, sharedArgs, uniqueKeyArgs, err := BuildDMLInsertQuery(databaseName, tableName, tableColumns, sharedColumns, sharedColumns, uniqueKeyColumns, args)
 		test.S(t).ExpectNil(err)
 		expected := `

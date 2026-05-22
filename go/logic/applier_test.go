@@ -8,6 +8,7 @@ package logic
 import (
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -17,6 +18,15 @@ import (
 	"github.com/github/gh-ost/go/binlog"
 	"github.com/github/gh-ost/go/sql"
 )
+
+var spacesRegexp = regexp.MustCompile(`[ \t\n\r]+`)
+
+func normalizeQuery(name string) string {
+	name = strings.Replace(name, "`", "", -1)
+	name = spacesRegexp.ReplaceAllString(name, " ")
+	name = strings.TrimSpace(name)
+	return name
+}
 
 func TestApplierGenerateSqlModeQuery(t *testing.T) {
 	migrationContext := base.NewMigrationContext()
@@ -221,35 +231,84 @@ func TestGenerateQuery(t *testing.T) {
 		FROM `+"`test`.`_mytable_gho`"+` 
 		WHERE `+"(`id`,`order_id`)"+` IN (('1', '2'), (1, 23))`)
 	})
-	t.Run("generateReplaceQuery1", func(t *testing.T) {
-		stmt := applier.generateReplaceQuery([][]string{{"1", "2"}})
-		test.S(t).ExpectEquals(stmt, `
-		REPLACE /* gh-ost `+"`test`.`mytable`"+` */
-		INTO `+"`test`.`_mytable_gho` (`id`,`order_id`,`name`,`age`)"+`
-		SELECT `+"`id`,`order_id`,`name`,`age`"+` 
-		FROM `+"`test`.`mytable`"+` 
-		FORCE INDEX `+"(`PRIMARY KEY`)"+` 
-		WHERE (`+"`id`,`order_id`"+`) IN ((1, 2))`)
+}
+
+func TestGenerateBatchedReplaceQuery(t *testing.T) {
+	migrationContext := base.NewMigrationContext()
+	migrationContext.DatabaseName = "test"
+	migrationContext.OriginalTableName = "mytable"
+	uniqueColumns := sql.NewColumnList([]string{"id"})
+	migrationContext.UniqueKey = &sql.UniqueKey{
+		Name:    "PRIMARY",
+		Columns: *uniqueColumns,
+	}
+	sharedColumns := sql.NewColumnList([]string{"id", "name", "age"})
+	mappedSharedColumns := sql.NewColumnList([]string{"id", "name", "age"})
+	migrationContext.SharedColumns = sharedColumns
+	migrationContext.MappedSharedColumns = mappedSharedColumns
+
+	applier := NewApplier(migrationContext)
+
+	t.Run("single row", func(t *testing.T) {
+		query, args := applier.generateBatchedReplaceQuery([][]interface{}{
+			{1, "alice", 30},
+		})
+		expectedQuery := `
+		replace /* gh-ost ` + "`test`.`mytable`" + ` */
+		into
+			` + "`test`.`_mytable_gho`" + `
+			(` + "`id`, `name`, `age`" + `)
+		values
+			(?, ?, ?)`
+		test.S(t).ExpectEquals(normalizeQuery(query), normalizeQuery(expectedQuery))
+		test.S(t).ExpectEquals(len(args), 3)
+		test.S(t).ExpectEquals(args[0], 1)
+		test.S(t).ExpectEquals(args[1], "alice")
+		test.S(t).ExpectEquals(args[2], 30)
 	})
-	t.Run("generateReplaceQuery2", func(t *testing.T) {
-		stmt := applier.generateReplaceQuery([][]string{{"'1'", "'2'"}})
-		test.S(t).ExpectEquals(stmt, `
-		REPLACE /* gh-ost `+"`test`.`mytable`"+` */
-		INTO `+"`test`.`_mytable_gho` (`id`,`order_id`,`name`,`age`)"+`
-		SELECT `+"`id`,`order_id`,`name`,`age`"+` 
-		FROM `+"`test`.`mytable`"+` 
-		FORCE INDEX `+"(`PRIMARY KEY`)"+` 
-		WHERE (`+"`id`,`order_id`"+`) IN (('1', '2'))`)
+
+	t.Run("multiple rows", func(t *testing.T) {
+		query, args := applier.generateBatchedReplaceQuery([][]interface{}{
+			{1, "alice", 30},
+			{2, "bob", 25},
+		})
+		expectedQuery := `
+		replace /* gh-ost ` + "`test`.`mytable`" + ` */
+		into
+			` + "`test`.`_mytable_gho`" + `
+			(` + "`id`, `name`, `age`" + `)
+		values
+			(?, ?, ?), (?, ?, ?)`
+		test.S(t).ExpectEquals(normalizeQuery(query), normalizeQuery(expectedQuery))
+		test.S(t).ExpectEquals(len(args), 6)
 	})
-	t.Run("generateReplaceQuery3", func(t *testing.T) {
-		stmt := applier.generateReplaceQuery([][]string{{"'1'", "'2'"}, {"1", "23"}})
-		test.S(t).ExpectEquals(stmt, `
-		REPLACE /* gh-ost `+"`test`.`mytable`"+` */
-		INTO `+"`test`.`_mytable_gho` (`id`,`order_id`,`name`,`age`)"+`
-		SELECT `+"`id`,`order_id`,`name`,`age`"+` 
-		FROM `+"`test`.`mytable`"+` 
-		FORCE INDEX `+"(`PRIMARY KEY`)"+` 
-		WHERE (`+"`id`,`order_id`"+`) IN (('1', '2'), (1, 23))`)
+
+	t.Run("empty", func(t *testing.T) {
+		query, args := applier.generateBatchedReplaceQuery([][]interface{}{})
+		test.S(t).ExpectEquals(query, "")
+		test.S(t).ExpectTrue(args == nil)
+	})
+
+	t.Run("special column types", func(t *testing.T) {
+		ctx := base.NewMigrationContext()
+		ctx.DatabaseName = "test"
+		ctx.OriginalTableName = "mytable"
+		cols := sql.NewColumnList([]string{"id", "ts", "data"})
+		cols.SetConvertDatetimeToTimestamp("ts", "US/Pacific")
+		cols.SetColumnType("data", sql.JSONColumnType)
+		ctx.SharedColumns = cols
+		ctx.MappedSharedColumns = cols
+		ctx.UniqueKey = &sql.UniqueKey{
+			Name:    "PRIMARY",
+			Columns: *sql.NewColumnList([]string{"id"}),
+		}
+		a := NewApplier(ctx)
+		query, args := a.generateBatchedReplaceQuery([][]interface{}{
+			{1, "2024-01-01 00:00:00", `{"key":"val"}`},
+		})
+		test.S(t).ExpectTrue(strings.Contains(query, "convert_tz(?, 'US/Pacific', '+00:00')"))
+		test.S(t).ExpectTrue(strings.Contains(query, "convert(? using utf8mb4)"))
+		test.S(t).ExpectEquals(len(args), 3)
 	})
 }
 
@@ -356,6 +415,15 @@ func TestIsIgnoreOverMaxChunkRangeEvent(t *testing.T) {
 	t.Run("greatMaxValue2", func(t *testing.T) {
 		migrationContext.IgnoreOverIterationRangeMaxBinlog = true
 		isIgnore, err := applier.isIgnoreOverMaxChunkRangeEvent([]interface{}{123457, 20240204})
+		test.S(t).ExpectNil(err)
+		test.S(t).ExpectFalse(isIgnore)
+	})
+
+	t.Run("nilIterationRangeMax", func(t *testing.T) {
+		migrationContext.IgnoreOverIterationRangeMaxBinlog = true
+		migrationContext.MigrationIterationRangeMaxValues = nil
+		// When iteration range max is nil (no chunk copied yet), must NOT ignore events
+		isIgnore, err := applier.isIgnoreOverMaxChunkRangeEvent([]interface{}{11112, 20240103})
 		test.S(t).ExpectNil(err)
 		test.S(t).ExpectFalse(isIgnore)
 	})
