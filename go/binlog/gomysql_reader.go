@@ -8,14 +8,11 @@ package binlog
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/github/gh-ost/go/base"
 	"github.com/github/gh-ost/go/mysql"
 	"github.com/github/gh-ost/go/sql"
-
-	"time"
-
-	"context"
 	gomysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	uuid "github.com/google/uuid"
@@ -130,8 +127,9 @@ func (gmr *GoMySQLReader) handleRowsEvent(ev *replication.BinlogEvent, rowsEvent
 
 // StreamEvents
 func (gmr *GoMySQLReader) StreamEvents(canStopStreaming func() bool, entriesChannel chan<- *BinlogEntry) error {
+	ctx := gmr.migrationContext.GetContext()
 	for !canStopStreaming() {
-		ev, err := gmr.binlogStreamer.GetEvent(context.Background())
+		ev, err := gmr.binlogStreamer.GetEvent(ctx)
 		if err != nil {
 			return err
 		}

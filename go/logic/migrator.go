@@ -836,14 +836,15 @@ func (mgtr *Migrator) cutOver() (err error) {
 				mgtr.migrationContext.Log.Debugf("current HeartbeatLag (%.2fs) is too high, it needs to be less than both --max-lag-millis (%.2fs) and --cut-over-lock-timeout-seconds (%.2fs) to continue", heartbeatLag.Seconds(), maxLagMillisecondsThrottle.Seconds(), cutOverLockTimeout.Seconds())
 				return true, nil
 			}
-			if mgtr.migrationContext.PostponeCutOverFlagFile == "" {
+			postponeFile := mgtr.migrationContext.GetPostponeCutOverFlagFile()
+			if postponeFile == "" {
 				return false, nil
 			}
 			if atomic.LoadInt64(&mgtr.migrationContext.UserCommandedUnpostponeFlag) > 0 {
 				atomic.StoreInt64(&mgtr.migrationContext.UserCommandedUnpostponeFlag, 0)
 				return false, nil
 			}
-			if base.FileExists(mgtr.migrationContext.PostponeCutOverFlagFile) {
+			if base.FileExists(postponeFile) {
 				// Postpone file defined and exists!
 				if atomic.LoadInt64(&mgtr.migrationContext.IsPostponingCutOver) == 0 {
 					if err := mgtr.hooksExecutor.OnBeginPostponed(); err != nil {
@@ -1233,13 +1234,13 @@ func (mgtr *Migrator) printMigrationStatusHint(writers ...io.Writer) {
 		)
 	}
 
-	if mgtr.migrationContext.PostponeCutOverFlagFile != "" {
+	if postponeFile := mgtr.migrationContext.GetPostponeCutOverFlagFile(); postponeFile != "" {
 		setIndicator := ""
-		if base.FileExists(mgtr.migrationContext.PostponeCutOverFlagFile) {
+		if base.FileExists(postponeFile) {
 			setIndicator = "[set]"
 		}
 		fmt.Fprintf(w, "# postpone-cut-over-flag-file: %+v %+v\n",
-			mgtr.migrationContext.PostponeCutOverFlagFile, setIndicator,
+			postponeFile, setIndicator,
 		)
 	}
 	if mgtr.migrationContext.PanicFlagFile != "" {

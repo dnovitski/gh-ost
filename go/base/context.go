@@ -766,6 +766,22 @@ func (mctx *MigrationContext) SetThrottleHTTP(throttleHTTP string) {
 	defer mctx.throttleHTTPMutex.Unlock()
 
 	mctx.throttleHTTP = throttleHTTP
+	if throttleHTTP == "" {
+		// Reset status code so stale value doesn't keep throttling active
+		atomic.StoreInt64(&mctx.ThrottleHTTPStatusCode, 0)
+	}
+}
+
+func (mctx *MigrationContext) GetPostponeCutOverFlagFile() string {
+	mctx.throttleMutex.Lock()
+	defer mctx.throttleMutex.Unlock()
+	return mctx.PostponeCutOverFlagFile
+}
+
+func (mctx *MigrationContext) SetPostponeCutOverFlagFile(filePath string) {
+	mctx.throttleMutex.Lock()
+	defer mctx.throttleMutex.Unlock()
+	mctx.PostponeCutOverFlagFile = filePath
 }
 
 func (mctx *MigrationContext) SetIgnoreHTTPErrors(ignoreHTTPErrors bool) {
