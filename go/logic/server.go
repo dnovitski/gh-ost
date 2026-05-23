@@ -415,7 +415,7 @@ help                                 # This message
 			if err := srv.createPostponeCutOverFlagFile(arg); err != nil {
 				return NoPrintStatusRule, err
 			}
-			srv.migrationContext.PostponeCutOverFlagFile = arg
+			srv.migrationContext.SetPostponeCutOverFlagFile(arg)
 			fmt.Fprintf(writer, "Postponed\n")
 			return ForcePrintStatusAndHintRule, nil
 		}

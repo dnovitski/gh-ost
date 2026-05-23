@@ -768,6 +768,18 @@ func (mctx *MigrationContext) SetThrottleHTTP(throttleHTTP string) {
 	mctx.throttleHTTP = throttleHTTP
 }
 
+func (mctx *MigrationContext) GetPostponeCutOverFlagFile() string {
+	mctx.throttleMutex.Lock()
+	defer mctx.throttleMutex.Unlock()
+	return mctx.PostponeCutOverFlagFile
+}
+
+func (mctx *MigrationContext) SetPostponeCutOverFlagFile(filePath string) {
+	mctx.throttleMutex.Lock()
+	defer mctx.throttleMutex.Unlock()
+	mctx.PostponeCutOverFlagFile = filePath
+}
+
 func (mctx *MigrationContext) SetIgnoreHTTPErrors(ignoreHTTPErrors bool) {
 	mctx.throttleHTTPMutex.Lock()
 	defer mctx.throttleHTTPMutex.Unlock()
