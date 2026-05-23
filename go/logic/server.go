@@ -74,10 +74,9 @@ func (srv *Server) runCPUProfile(args string) (io.Reader, error) {
 		}
 	}
 
-	if atomic.LoadInt64(&srv.isCPUProfiling) > 0 {
+	if !atomic.CompareAndSwapInt64(&srv.isCPUProfiling, 0, 1) {
 		return nil, ErrCPUProfilingInProgress
 	}
-	atomic.StoreInt64(&srv.isCPUProfiling, 1)
 	defer atomic.StoreInt64(&srv.isCPUProfiling, 0)
 
 	var buf bytes.Buffer
