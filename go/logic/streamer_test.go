@@ -101,7 +101,6 @@ func (suite *EventsStreamerTestSuite) TestStreamEvents() {
 
 	group := errgroup.Group{}
 	group.Go(func() error {
-		//nolint:contextcheck
 		return streamer.StreamEvents(func() bool {
 			return streamCtx.Err() != nil
 		})
@@ -177,7 +176,6 @@ func (suite *EventsStreamerTestSuite) TestStreamEventsAutomaticallyReconnects() 
 
 	group := errgroup.Group{}
 	group.Go(func() error {
-		//nolint:contextcheck
 		return streamer.StreamEvents(func() bool {
 			return streamCtx.Err() != nil
 		})
