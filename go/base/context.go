@@ -766,6 +766,7 @@ func (mctx *MigrationContext) SetThrottleHTTP(throttleHTTP string) {
 	defer mctx.throttleHTTPMutex.Unlock()
 
 	mctx.throttleHTTP = throttleHTTP
+	atomic.StoreInt64(&mctx.ThrottleHTTPStatusCode, 0)
 }
 
 func (mctx *MigrationContext) SetIgnoreHTTPErrors(ignoreHTTPErrors bool) {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -269,4 +270,37 @@ func TestSetAbortError_ThreadSafe(t *testing.T) {
 	if !found {
 		t.Errorf("Stored error %v not in list of sent errors", got)
 	}
+}
+
+func TestSetThrottleHTTP_ClearsStatusCode(t *testing.T) {
+	// Reproduces the bug: clearing throttle-http URL should reset
+	// ThrottleHTTPStatusCode so the migration stops being throttled.
+	// Without the fix, the stale status code (e.g. 503) persists and
+	// shouldThrottle() keeps the migration throttled forever.
+	ctx := NewMigrationContext()
+
+	// Simulate: HTTP throttle endpoint returned 503 (Service Unavailable)
+	atomic.StoreInt64(&ctx.ThrottleHTTPStatusCode, 503)
+
+	// Operator clears the throttle-http URL to disable HTTP throttling
+	ctx.SetThrottleHTTP("")
+
+	// Status code must be reset to 0 so shouldThrottle() stops throttling
+	statusCode := atomic.LoadInt64(&ctx.ThrottleHTTPStatusCode)
+	require.Equal(t, int64(0), statusCode,
+		"clearing throttle-http URL must reset ThrottleHTTPStatusCode to 0")
+}
+
+func TestSetThrottleHTTP_PreservesStatusCodeWhenURLSet(t *testing.T) {
+	// Changing to a different URL should also reset the status code —
+	// the old code is stale (from a different endpoint) and the next
+	// poll of the new URL will set the correct value.
+	ctx := NewMigrationContext()
+
+	atomic.StoreInt64(&ctx.ThrottleHTTPStatusCode, 503)
+	ctx.SetThrottleHTTP("http://new-service/throttle")
+
+	statusCode := atomic.LoadInt64(&ctx.ThrottleHTTPStatusCode)
+	require.Equal(t, int64(0), statusCode,
+		"changing throttle-http URL must reset stale ThrottleHTTPStatusCode")
 }
