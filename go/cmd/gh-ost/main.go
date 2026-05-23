@@ -29,7 +29,7 @@ var AppVersion, GitCommit string
 func acceptSignals(migrationContext *base.MigrationContext) {
 	c := make(chan os.Signal, 1)
 
-	signal.Notify(c, syscall.SIGHUP)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		for sig := range c {
 			switch sig {
@@ -39,6 +39,15 @@ func acceptSignals(migrationContext *base.MigrationContext) {
 					log.Errore(err)
 				} else {
 					migrationContext.MarkPointOfInterest()
+				}
+			case syscall.SIGTERM, syscall.SIGINT:
+				migrationContext.Log.Infof("Received %s. Initiating graceful shutdown", sig)
+				select {
+				case migrationContext.PanicAbort <- fmt.Errorf("received signal: %s", sig):
+				default:
+					// PanicAbort already has an error; force exit
+					migrationContext.Log.Errorf("failed to send abort signal, forcing exit")
+					os.Exit(1)
 				}
 			}
 		}

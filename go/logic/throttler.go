@@ -431,7 +431,11 @@ func (thlr *Throttler) collectGeneralThrottleMetrics() error {
 		}
 	}
 	if thlr.migrationContext.GetThrottleQuery() != "" {
-		if res, _ := thlr.applier.ExecuteThrottleQuery(); res > 0 {
+		res, err := thlr.applier.ExecuteThrottleQuery()
+		if err != nil {
+			return setThrottle(true, fmt.Sprintf("throttle-query error: %v", err), base.NoThrottleReasonHint)
+		}
+		if res > 0 {
 			return setThrottle(true, "throttle-query", base.NoThrottleReasonHint)
 		}
 	}

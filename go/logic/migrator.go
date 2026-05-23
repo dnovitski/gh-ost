@@ -552,7 +552,7 @@ func (mgtr *Migrator) Migrate() (err error) {
 	// inspectOriginalAndGhostTables must be called before creating checkpoint table.
 	if mgtr.migrationContext.Checkpoint && !mgtr.migrationContext.Resume {
 		if err := mgtr.applier.CreateCheckpointTable(); err != nil {
-			mgtr.migrationContext.Log.Errorf("unable to create checkpoint table, see further error details")
+			return err
 		}
 	}
 
@@ -653,7 +653,7 @@ func (mgtr *Migrator) Migrate() (err error) {
 	}
 
 	if err := mgtr.finalCleanup(); err != nil {
-		return nil
+		return err
 	}
 	if err := mgtr.hooksExecutor.OnSuccess(false); err != nil {
 		return err
@@ -768,7 +768,7 @@ func (mgtr *Migrator) Revert() error {
 	}
 	atomic.StoreInt64(&mgtr.migrationContext.CutOverCompleteFlag, 1)
 	if err := mgtr.finalCleanup(); err != nil {
-		return nil
+		return err
 	}
 	if err := mgtr.hooksExecutor.OnSuccess(false); err != nil {
 		return err
@@ -786,7 +786,12 @@ func (mgtr *Migrator) ExecOnFailureHook() (err error) {
 func (mgtr *Migrator) handleCutOverResult(cutOverError error) (err error) {
 	if mgtr.migrationContext.TestOnReplica {
 		// We're merely testing, we don't want to keep this state. Rollback the renames as possible
-		mgtr.applier.RenameTablesRollback()
+		if rollbackErr := mgtr.applier.RenameTablesRollback(); rollbackErr != nil {
+			mgtr.migrationContext.Log.Errorf("failed to rollback table renames: %v", rollbackErr)
+			if cutOverError == nil {
+				return rollbackErr
+			}
+		}
 	}
 	if cutOverError == nil {
 		return nil
@@ -890,7 +895,12 @@ func (mgtr *Migrator) cutOver() (err error) {
 	default:
 		return mgtr.migrationContext.Log.Fatalf("Unknown cut-over type: %d; should never get here!", mgtr.migrationContext.CutOverType)
 	}
-	mgtr.handleCutOverResult(err)
+	if handleErr := mgtr.handleCutOverResult(err); handleErr != nil {
+		mgtr.migrationContext.Log.Errorf("error handling cut-over result: %v", handleErr)
+		if err == nil {
+			err = handleErr
+		}
+	}
 	return err
 }
 
