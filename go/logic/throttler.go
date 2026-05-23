@@ -172,7 +172,7 @@ func (thlr *Throttler) collectReplicationLag(firstThrottlingCollected chan<- boo
 		if atomic.LoadInt64(&thlr.finishedMigrating) > 0 {
 			return
 		}
-		go collectFunc()
+		collectFunc()
 	}
 }
 
