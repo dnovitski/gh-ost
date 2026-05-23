@@ -552,7 +552,7 @@ func (mgtr *Migrator) Migrate() (err error) {
 	// inspectOriginalAndGhostTables must be called before creating checkpoint table.
 	if mgtr.migrationContext.Checkpoint && !mgtr.migrationContext.Resume {
 		if err := mgtr.applier.CreateCheckpointTable(); err != nil {
-			mgtr.migrationContext.Log.Errorf("unable to create checkpoint table, see further error details")
+			return err
 		}
 	}
 
