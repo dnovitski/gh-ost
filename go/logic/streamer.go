@@ -235,6 +235,7 @@ func (es *EventsStreamer) StreamEvents(canStopStreaming func() bool) error {
 
 func (es *EventsStreamer) Close() (err error) {
 	err = es.binlogReader.Close()
+	close(es.eventsChannel)
 	es.migrationContext.Log.Infof("Closed streamer connection. err=%+v", err)
 	return err
 }
