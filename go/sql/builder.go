@@ -30,6 +30,7 @@ func EscapeName(name string) string {
 	if unquoted, err := strconv.Unquote(name); err == nil {
 		name = unquoted
 	}
+	name = strings.ReplaceAll(name, "`", "``")
 	return fmt.Sprintf("`%s`", name)
 }
 

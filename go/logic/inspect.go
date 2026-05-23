@@ -249,6 +249,9 @@ func (isp *Inspector) validateGrants() error {
 			if strings.Contains(grant, `REPLICATION SLAVE`) && strings.Contains(grant, ` ON *.*`) {
 				foundReplicationSlave = true
 			}
+			if strings.Contains(grant, `REPLICATION REPLICA`) && strings.Contains(grant, ` ON *.*`) {
+				foundReplicationSlave = true
+			}
 			if strings.Contains(grant, fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.*", isp.migrationContext.DatabaseName)) {
 				foundDBAll = true
 			}
