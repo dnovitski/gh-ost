@@ -6,7 +6,7 @@ set -e
 
 echo "Verifying code is formatted via 'gofmt -s -w  go/'"
 gofmt -s -w go/
-git diff --exit-code --quiet go/
+git diff --exit-code --quiet
 
 echo "Building"
 script/build
@@ -14,4 +14,4 @@ script/build
 cd .gopath/src/github.com/github/gh-ost
 
 echo "Running unit tests"
-go test "$@" -v -covermode=atomic ./go/...
+go test -v -p 1 -covermode=atomic -race ./go/...

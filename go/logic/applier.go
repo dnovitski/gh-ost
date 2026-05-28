@@ -109,12 +109,14 @@ func (apl *Applier) compileMigrationKeyWarningRegex() (*regexp.Regexp, error) {
 	return migrationKeyRegex, nil
 }
 
-func (apl *Applier) InitDBConnections() (err error) {
+func (apl *Applier) InitDBConnections(maxConns int) (err error) {
 	applierUri := apl.connectionConfig.GetDBUri(apl.migrationContext.DatabaseName)
 	uriWithMulti := fmt.Sprintf("%s&multiStatements=true", applierUri)
 	if apl.db, _, err = mysql.GetDB(apl.migrationContext.Uuid, uriWithMulti); err != nil {
 		return err
 	}
+	apl.db.SetMaxOpenConns(maxConns)
+	apl.db.SetMaxIdleConns(maxConns)
 	singletonApplierUri := fmt.Sprintf("%s&timeout=0", applierUri)
 	if apl.singletonDB, _, err = mysql.GetDB(apl.migrationContext.Uuid, singletonApplierUri); err != nil {
 		return err

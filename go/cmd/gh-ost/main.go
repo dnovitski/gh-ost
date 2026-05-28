@@ -13,9 +13,11 @@ import (
 	"os/signal"
 	"regexp"
 	"syscall"
+	"time"
 
 	"github.com/github/gh-ost/go/base"
 	"github.com/github/gh-ost/go/logic"
+	"github.com/github/gh-ost/go/metrics"
 	"github.com/github/gh-ost/go/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/openark/golib/log"
@@ -24,6 +26,20 @@ import (
 )
 
 var AppVersion, GitCommit string
+
+type statsdTagList []string
+
+func (s *statsdTagList) String() string {
+	if s == nil || len(*s) == 0 {
+		return ""
+	}
+	return fmt.Sprint([]string(*s))
+}
+
+func (s *statsdTagList) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
 
 // acceptSignals registers for OS signals
 func acceptSignals(migrationContext *base.MigrationContext) {
@@ -112,6 +128,7 @@ func main() {
 	flag.BoolVar(&migrationContext.PanicOnWarnings, "panic-on-warnings", false, "Panic when SQL warnings are encountered when copying a batch indicating data loss")
 	cutOverLockTimeoutSeconds := flag.Int64("cut-over-lock-timeout-seconds", 3, "Max number of seconds to hold locks on tables while attempting to cut-over (retry attempted when lock exceeds timeout) or attempting instant DDL")
 	niceRatio := flag.Float64("nice-ratio", 0, "force being 'nice', imply sleep time per chunk time; range: [0.0..100.0]. Example values: 0 is aggressive. 1: for every 1ms spent copying rows, sleep additional 1ms (effectively doubling runtime); 0.7: for every 10ms spend in a rowcopy chunk, spend 7ms sleeping immediately after")
+	flag.IntVar(&migrationContext.NumWorkers, "workers", 8, "Number of concurrent workers for applying DML events. Each worker uses one goroutine.")
 
 	maxLagMillis := flag.Int64("max-lag-millis", 1500, "replication lag at which to throttle operation")
 	replicationLagQuery := flag.String("replication-lag-query", "", "Deprecated. gh-ost uses an internal, subsecond resolution query")
@@ -156,6 +173,10 @@ func main() {
 	criticalLoad := flag.String("critical-load", "", "Comma delimited status-name=threshold, same format as --max-load. When status exceeds threshold, app panics and quits")
 	flag.Int64Var(&migrationContext.CriticalLoadIntervalMilliseconds, "critical-load-interval-millis", 0, "When 0, migration immediately bails out upon meeting critical-load. When non-zero, a second check is done after given interval, and migration only bails out if 2nd check still meets critical load")
 	flag.Int64Var(&migrationContext.CriticalLoadHibernateSeconds, "critical-load-hibernate-seconds", 0, "When non-zero, critical-load does not panic and bail out; instead, gh-ost goes into hibernation for the specified duration. It will not read/write anything from/to any server")
+	statsdAddr := flag.String("statsd-addr", "", "StatsD endpoint (host:port or unix socket); empty disables StatsD")
+	var statsdTags statsdTagList
+	flag.Var(&statsdTags, "statsd-tags", "global StatsD tags applied to every metric (repeatable), format key:value. Example: --statsd-tags 'env:prod,service:my-service'")
+	runtimeMetricsInterval := flag.Int("runtime-metrics-interval", 10, "Seconds between Go runtime memory/GC gauge samples (requires --statsd-addr); 0 disables")
 	quiet := flag.Bool("quiet", false, "quiet")
 	verbose := flag.Bool("verbose", false, "verbose")
 	debug := flag.Bool("debug", false, "debug mode (very verbose)")
@@ -374,6 +395,17 @@ func main() {
 
 	log.Infof("starting gh-ost %+v (git commit: %s)", AppVersion, GitCommit)
 	acceptSignals(migrationContext)
+
+	metricsClient, metricsErr := metrics.NewClient(*statsdAddr, []string(statsdTags), "gh_ost.")
+	if metricsErr != nil {
+		log.Fatalf("metrics: %v", metricsErr)
+	}
+	defer func() { _ = metricsClient.Close() }()
+	migrationContext.Metrics = metricsClient
+	metricsClient.Count("startup", 1)
+	if *runtimeMetricsInterval > 0 {
+		metrics.StartGoRuntimeReporter(migrationContext.GetContext(), metricsClient, time.Duration(*runtimeMetricsInterval)*time.Second)
+	}
 
 	migrator := logic.NewMigrator(migrationContext, AppVersion)
 	var err error
