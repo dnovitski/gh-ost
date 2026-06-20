@@ -597,6 +597,7 @@ func (mgtr *Migrator) Migrate() (err error) {
 		return err
 	}
 	defer mgtr.server.RemoveSocketFile()
+	defer mgtr.server.Close()
 
 	if err := mgtr.countTableRows(); err != nil {
 		return err
@@ -753,6 +754,7 @@ func (mgtr *Migrator) Revert() error {
 		return err
 	}
 	defer mgtr.server.RemoveSocketFile()
+	defer mgtr.server.Close()
 	if err := mgtr.addDMLEventsListener(); err != nil {
 		return err
 	}

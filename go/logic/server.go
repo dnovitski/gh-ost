@@ -147,7 +147,7 @@ func (srv *Server) Serve() (err error) {
 		for {
 			conn, err := srv.unixListener.Accept()
 			if err != nil {
-				srv.migrationContext.Log.Errore(err)
+				return
 			}
 			go srv.handleConnection(conn)
 		}
@@ -159,13 +159,23 @@ func (srv *Server) Serve() (err error) {
 		for {
 			conn, err := srv.tcpListener.Accept()
 			if err != nil {
-				srv.migrationContext.Log.Errore(err)
+				return
 			}
 			go srv.handleConnection(conn)
 		}
 	}()
 
 	return nil
+}
+
+// Close shuts down the server listeners
+func (srv *Server) Close() {
+	if srv.unixListener != nil {
+		srv.unixListener.Close()
+	}
+	if srv.tcpListener != nil {
+		srv.tcpListener.Close()
+	}
 }
 
 func (srv *Server) handleConnection(conn net.Conn) (err error) {
