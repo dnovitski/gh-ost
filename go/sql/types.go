@@ -272,7 +272,7 @@ func (cl *ColumnList) FilterBy(f func(Column) bool) *ColumnList {
 			filteredCols = append(filteredCols, column)
 		}
 	}
-	return &ColumnList{Ordinals: cl.Ordinals, columns: filteredCols}
+	return &ColumnList{Ordinals: NewColumnsMap(filteredCols), columns: filteredCols}
 }
 
 func (cl *ColumnList) Len() int {
