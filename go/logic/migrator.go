@@ -666,7 +666,7 @@ func (mgtr *Migrator) Migrate() (err error) {
 	}
 
 	if err := mgtr.finalCleanup(); err != nil {
-		return nil
+		return err
 	}
 	if err := mgtr.hooksExecutor.OnSuccess(false); err != nil {
 		return err
@@ -781,7 +781,7 @@ func (mgtr *Migrator) Revert() error {
 	}
 	atomic.StoreInt64(&mgtr.migrationContext.CutOverCompleteFlag, 1)
 	if err := mgtr.finalCleanup(); err != nil {
-		return nil
+		return err
 	}
 	if err := mgtr.hooksExecutor.OnSuccess(false); err != nil {
 		return err
